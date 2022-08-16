@@ -1,6 +1,7 @@
 import asyncio
-from getpass import getpass
+import time
 from argparse import ArgumentParser
+import logging
 from slixmpp.exceptions import IqError, IqTimeout
 import xmpp
 
@@ -26,8 +27,9 @@ class Client(ClientXMPP):
         # App logic
         self.messages = {}
         self.contacts = self.roster[self.jid]
-        self.room = None
+        self.actual_room = ""
         self.chat = None
+        self.is_client_offline = True
         # Auto authorize & subscribe on subscription received
         self.roster.auto_authorize = True
         self.roster.auto_subscribe = True
@@ -38,23 +40,17 @@ class Client(ClientXMPP):
         self.add_event_handler("groupchat_message", self.muc_message)
 
     def muc_join(self, room):
-        print('ROOM TO JOIN', room)
         try:
-            self.room = room
-            self.plugin['xep_0045'].join_muc(self.room, self.local_jid, maxhistory = False)
-            self.send_message(
-            mto=self.room,
-            mbody="ONLINE",
-            mtype="groupchat"
-            )
+            self.actual_room = room
+            self['xep_0045'].join_muc(self.actual_room, self.local_jid)
         except:
             print('Problem joining room')
        
 
     def muc_exit(self):
         try:
-            self.plugin['xep_0045'].leave_muc(self.room, self.local_jid)
-            self.room = None
+            self.plugin['xep_0045'].leave_muc(self.actual_room, self.local_jid)
+            self.actual_room = None
             self.nick = ''
         except:
             print('Problem leaving room')
@@ -68,28 +64,17 @@ class Client(ClientXMPP):
             print("Error on login")
             self.disconnect()
 
-    async def muc_message(self, msg):
-        """ print('group',msg) """
-        sender = msg['mucnick']
-        test = sender[sender.index("/"):]
-        sender = sender[:sender.index("/")]
-        body = msg['body']
-        print('AQUI TA RARO ', sender, ": ", body, str(msg['type']), test)
-        if msg['type'] == "chatgroup":
+    async def muc_message(self, message = ""):
+        final_msg = ": " + message["body"]
+        print(final_msg)
+        """ if msg["from"] != self.local_jid:
+            print("chimon", msg, final_msg) """
 
-            sender = msg['mucnick']
-            sender = sender[:sender.index("/")]
-            body = msg['body']
-            print('AQUI TA RARO ', sender, ": ", body)
-            if sender != self.nick:
-                print(sender, ": ", body)
-
-    def muc_send_message(self, msg):
-        print('GROUPCHAT MESSAGE', msg, self.room)
+    def muc_send_message(self, message= ""):
         try:
-            self.send_message(mto=self.room, mbody=msg, mtype="chatgroup")
+            self.send_message(mto=self.actual_room, mbody=message, mtype="groupchat")
         except:
-            print('Unexpected error while sending message to group', self.room)
+            print('Unexpected error while sending message to group', self.actual_room)
 
     def change_presence(self, presence, status_message):
         try:
@@ -115,10 +100,10 @@ class Client(ClientXMPP):
             contacts = self.roster[self.local_jid]
             self.contacts = contacts
 
-            if(len(contacts.keys()) == 0):
+            if(len(self.contacts.keys()) == 0):
                 print("0 contacts")
 
-            for contact in contacts.keys():
+            for contact in self.contacts.keys():
                 if contact != self.local_jid:
                     contact_message = f"Contact: {contact}, status: "
                     contact_info = list(self.client_roster.presence(contact).values())
@@ -142,10 +127,10 @@ class Client(ClientXMPP):
             contacts = self.roster[self.local_jid]
             self.contacts = contacts
 
-            if(len(contacts.keys()) == 0):
+            if(len(self.contacts.keys()) == 0):
                 print("Not contacts available")
 
-            if username in contacts.keys():
+            if username in self.contacts.keys():
                 contact_message = f"Contact: {username}, status: "
                 contact_info = list(self.client_roster.presence(username).values())
                 if contact_info[0]['status'] != '':
@@ -162,29 +147,29 @@ class Client(ClientXMPP):
         except:
             print('Something went wrong with showing user info')
     
-    def direct_message(self, recipient, msg):
+    def direct_message(self, recipient, message=""):
         self.send_message(
             mto = recipient, 
-            mbody = msg, 
+            mbody = message, 
             mtype = 'chat', 
             mfrom = self.local_jid
         )
 
         recipient = recipient[:recipient.index("@")]
         sender = self.local_jid[:self.local_jid.index("@")]
-        final_msg = sender + ":" + msg
+        final_msg = sender + ":" + message
 
         if recipient in self.messages.keys():
             self.messages[recipient]["messages"].append(final_msg)
         else:
             self.messages[recipient] = {"messages":[final_msg]}
 
-    async def message(self, msg):
-        if msg['type'] == 'chat':
+    async def message(self, message):
+        if message['type'] == 'chat':
 
-            sender = msg['from']
+            sender = str(message['from'])
             sender = sender[:sender.index("@")]
-            body = msg['body']
+            body = str(message['body'])
             
             current_message = sender + ":" + body
 
@@ -194,7 +179,7 @@ class Client(ClientXMPP):
                 self.messages[sender] = {"messages": [current_message]}
 
             if not self.chat == sender:
-                print("\n Messaga from", sender)
+                print("\n Message from", sender)
             else:
                 print("\n",current_message)
                 print(">", end="")
@@ -312,7 +297,7 @@ while condition:
         option = input('''1.Create User\n2. Login\n3.Delete account\n4. Exit\nIngrese una opcion: ''')
         if option == '1':
             jid = input('Username: ')
-            password  = getpass('Password: ')
+            password  = input('Password: ')
             """ args.jid = 'pad19200@alumchat.fun'
             args.password  = 'clabe1' """
 
@@ -327,7 +312,7 @@ while condition:
 
         elif option == '2':
             """ jid = input('Username: ')
-            password  = getpass('Password: ') """
+            password  = input('Password: ') """
             """ args.jid = 'pad19200@alumchat.fun'
             args.password  = 'clabe1' """
             """ jid = 'prueba23@alumchat.fun'
@@ -336,6 +321,8 @@ while condition:
             password  = 'prueba100'
             """ jid = 'otrapr@alumchat.fun'
             password  = 'otrapr' """
+            """ jid = 'coco@alumchat.fun'
+            password  = 'coco1' """
 
             user = Client(jid, password, 'Available', 'HELLO')
             user.connect()
@@ -345,7 +332,7 @@ while condition:
             password = input("Password: ")
             user = UnregisterClient(username, password)
             user.connect()
-            user.process(forever=False)
+            user.process(timeout=5)
             user = None
         elif option == '4':
             condition = False
