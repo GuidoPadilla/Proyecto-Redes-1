@@ -1,25 +1,24 @@
 import asyncio
-import time
-from argparse import ArgumentParser
-import logging
 from slixmpp.exceptions import IqError, IqTimeout
 import xmpp
 
 from slixmpp import ClientXMPP
 
-
+#Compatiblity with windows and asyncio
 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+#General Class for XMPP client chat
 class Client(ClientXMPP):
     def __init__(self, jid, password, status, status_message):
         ClientXMPP.__init__(self, jid, password)
-
+        #Plugins
         self.register_plugin('xep_0030') # Service Discovery
         self.register_plugin('xep_0199') # Ping
         self.register_plugin('xep_0004') # Data Forms
         self.register_plugin('xep_0060') # PubSub
         self.register_plugin('xep_0085') # Chat State Notifications
         self.register_plugin('xep_0045') # MUC
-        
+        #attributes
         self.local_jid = jid
         self.nick = jid[:jid.index("@")]
         self.status = status
@@ -39,6 +38,7 @@ class Client(ClientXMPP):
         self.add_event_handler("message", self.message)
         self.add_event_handler("groupchat_message", self.muc_message)
 
+    #room join function
     def muc_join(self, room):
         try:
             self.actual_room = room
@@ -46,7 +46,7 @@ class Client(ClientXMPP):
         except:
             print('Problem joining room')
        
-
+    #room exit function 
     def muc_exit(self):
         try:
             self.plugin['xep_0045'].leave_muc(self.actual_room, self.local_jid)
@@ -54,7 +54,7 @@ class Client(ClientXMPP):
             self.nick = ''
         except:
             print('Problem leaving room')
-        
+    #start of xmpp client
     def start(self, event):
         self.send_presence(pshow=self.status, pstatus=self.status_message)
         try:
@@ -63,19 +63,19 @@ class Client(ClientXMPP):
         except:
             print("Error on login")
             self.disconnect()
-
+    #room mesasge funciton for receiving
     async def muc_message(self, message = ""):
         final_msg = ": " + message["body"]
         print(final_msg)
         """ if msg["from"] != self.local_jid:
             print("chimon", msg, final_msg) """
-
+    #room message function for sending
     def muc_send_message(self, message= ""):
         try:
             self.send_message(mto=self.actual_room, mbody=message, mtype="groupchat")
         except:
             print('Unexpected error while sending message to group', self.actual_room)
-
+    #Function for change status of client 
     def change_presence(self, presence, status_message):
         try:
             self.status = presence
@@ -83,7 +83,7 @@ class Client(ClientXMPP):
             self.send_presence(pshow=presence, pstatus=status_message)
         except:
             print("Could not update status and status message.")
-
+    #Add contact
     def add_contact(self, recipient):
         try:
             self.send_presence_subscription(recipient, self.local_jid)
@@ -91,9 +91,7 @@ class Client(ClientXMPP):
         except:
             print("ERROR ON SUBSCRIBE")
 
-    """
-    Contacts
-    """
+    #function for list all contacts
     def show_contacts(self):
         try:
             self.get_roster()
@@ -120,7 +118,7 @@ class Client(ClientXMPP):
         except:
             print('Contacts failed to retrieve')
         
-                
+    #show contact specific info       
     def show_user_info(self, username):
         try:
             self.get_roster()
@@ -146,7 +144,7 @@ class Client(ClientXMPP):
                 print('Unavaible contact with user: ', username)
         except:
             print('Something went wrong with showing user info')
-    
+    #funciton for sending 1 to 1 message
     def direct_message(self, recipient, message=""):
         self.send_message(
             mto = recipient, 
@@ -163,7 +161,7 @@ class Client(ClientXMPP):
             self.messages[recipient]["messages"].append(final_msg)
         else:
             self.messages[recipient] = {"messages":[final_msg]}
-
+    #Function for receive 1 to 1 messages
     async def message(self, message):
         if message['type'] == 'chat':
 
@@ -184,6 +182,7 @@ class Client(ClientXMPP):
                 print("\n",current_message)
                 print(">", end="")
 
+#Class for unregister client
 class UnregisterClient(ClientXMPP):
 
     def __init__(self, jid, password):
@@ -219,7 +218,7 @@ class UnregisterClient(ClientXMPP):
         except IqTimeout:
             print("No response from server.")
             self.disconnect()
-
+#Function to create user with xmpp
 def createUser(user, password):
     usuario = user
     password = password
@@ -234,6 +233,7 @@ def createUser(user, password):
 condition = True
 user = None
 
+#Main loop for handling all actions of user
 """ try: """
 while condition:
     if user:
